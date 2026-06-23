@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="goldrock" x1="110" y1="70" x2="420" y2="435" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fff36b"/><stop offset="0.35" stop-color="#f2a40c"/><stop offset="0.72" stop-color="#9a5a05"/><stop offset="1" stop-color="#2b1805"/></linearGradient>
+    <linearGradient id="crystal" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffdeb"/><stop offset="0.32" stop-color="#ffe51d"/><stop offset="1" stop-color="#b76a00"/></linearGradient>
+    <filter id="spark" x="-40%" y="-40%" width="180%" height="180%"><feGaussianBlur stdDeviation="2" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g stroke-linejoin="round">
+    <path d="M73 238 112 140 208 76 320 78 426 150 459 260 407 380 290 440 168 423 88 333Z" fill="url(#goldrock)" stroke="#ffd34a" stroke-opacity="0.75" stroke-width="7"/>
+    <path d="M112 140 204 156 208 76M204 156 282 118 320 78M204 156 158 258 73 238M158 258 255 239 282 118M255 239 348 203 426 150M255 239 275 335 168 423M275 335 372 320 407 380M348 203 372 320 459 260M88 333 275 335" fill="none" stroke="#5d3100" stroke-opacity="0.45" stroke-width="5"/>
+    <g fill="#5d3100" opacity="0.45"><ellipse cx="168" cy="232" rx="42" ry="32" transform="rotate(-18 168 232)"/><ellipse cx="302" cy="165" rx="19" ry="14"/><ellipse cx="359" cy="289" rx="36" ry="28" transform="rotate(20 359 289)"/><ellipse cx="225" cy="354" rx="26" ry="18"/><ellipse cx="130" cy="315" rx="20" ry="26"/></g>
+    <g stroke="#fff4a0" stroke-width="3" filter="url(#spark)">
+      <path d="M297 119 352 82 388 136 337 202Z" fill="url(#crystal)"/><path d="M279 265 356 224 388 292 327 356Z" fill="url(#crystal)"/><path d="M400 210 430 174 452 220 421 266Z" fill="url(#crystal)"/><path d="M176 343 206 314 235 356 198 391Z" fill="url(#crystal)"/><path d="M123 181 151 149 176 192 143 230Z" fill="url(#crystal)"/>
+      <path d="M86 370 119 332 152 382 115 424Z" fill="url(#crystal)"/><path d="M382 404 432 365 468 416 416 456Z" fill="url(#crystal)"/>
+    </g>
+    <g fill="#fff8c8" opacity="0.9"><path d="M334 91 342 111 363 119 342 127 334 148 326 127 305 119 326 111Z"/><path d="M242 304 247 318 261 323 247 328 242 343 237 328 222 323 237 318Z"/><path d="M119 232 124 245 137 250 124 255 119 268 114 255 101 250 114 245Z"/></g>
+    <g fill="#bd6f00"><path d="M48 287 75 260 103 296 69 323Z"/><path d="M440 74 466 88 468 120 435 124 418 98Z"/><path d="M446 310 477 296 499 325 475 352Z"/></g>
+  </g>
+</svg>
