@@ -1,0 +1,56 @@
+{
+  "leaderboard": {
+    "name": "star_dust",
+    "title_ru": "Звёздная пыль",
+    "title_en": "Star Dust",
+    "score_type": "numeric",
+    "direction": "desc"
+  },
+  "products": [
+    {
+      "id": "noads",
+      "type": "permanent",
+      "title_ru": "Убрать рекламу",
+      "title_en": "Remove Ads",
+      "description_ru": "Отключает sticky-баннеры и полноэкранную рекламу. Rewarded-реклама остаётся только по желанию игрока.",
+      "description_en": "Disables sticky banners and fullscreen ads. Rewarded ads remain optional.",
+      "recommended_price_rub": 199
+    },
+    {
+      "id": "starter_pack",
+      "type": "consumable",
+      "title_ru": "Стартовый набор",
+      "title_en": "Starter Pack",
+      "description_ru": "+120 кристаллов и +25K руды. Расходуемая покупка, обязательно консумируется после начисления.",
+      "description_en": "+120 crystals and +25K ore. Consumable purchase, consumed after grant.",
+      "recommended_price_rub": 99
+    },
+    {
+      "id": "crystals_small",
+      "type": "consumable",
+      "title_ru": "Малая пачка кристаллов",
+      "title_en": "Small Crystal Pack",
+      "description_ru": "+80 кристаллов. Расходуемая покупка.",
+      "description_en": "+80 crystals. Consumable purchase.",
+      "recommended_price_rub": 59
+    },
+    {
+      "id": "crystals_big",
+      "type": "consumable",
+      "title_ru": "Большая пачка кристаллов",
+      "title_en": "Big Crystal Pack",
+      "description_ru": "+450 кристаллов. Расходуемая покупка.",
+      "description_en": "+450 crystals. Consumable purchase.",
+      "recommended_price_rub": 249
+    },
+    {
+      "id": "drill_skin_neon",
+      "type": "permanent",
+      "title_ru": "Неоновый бур",
+      "title_en": "Neon Drill",
+      "description_ru": "Постоянный косметический скин добывающего дрона/бура.",
+      "description_en": "Permanent cosmetic skin for mining drone/drill.",
+      "recommended_price_rub": 149
+    }
+  ]
+}
