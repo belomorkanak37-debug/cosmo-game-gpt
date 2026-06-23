@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="rock" x1="120" y1="70" x2="410" y2="430" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b8aaa0"/><stop offset="0.45" stop-color="#82736d"/><stop offset="1" stop-color="#2d2524"/>
+    </linearGradient>
+    <linearGradient id="edge" x1="90" y1="90" x2="430" y2="460" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#efe5dc" stop-opacity="0.9"/><stop offset="1" stop-color="#0a2549" stop-opacity="0.8"/>
+    </linearGradient>
+  </defs>
+  <g fill="none" stroke-linejoin="round">
+    <path d="M86 236 112 150 198 84 309 68 412 118 458 224 421 344 326 430 198 438 104 356Z" fill="url(#rock)" stroke="url(#edge)" stroke-width="6"/>
+    <path d="M112 150 196 156 198 84M196 156 275 118 309 68M196 156 152 252 86 236M152 252 240 232 275 118M240 232 334 194 412 118M240 232 252 332 198 438M252 332 350 318 421 344M334 194 350 318 458 224M104 356 252 332" stroke="#1d171a" stroke-opacity="0.28" stroke-width="5"/>
+    <g fill="#211917" opacity="0.55">
+      <ellipse cx="172" cy="226" rx="42" ry="34" transform="rotate(-20 172 226)"/>
+      <ellipse cx="303" cy="166" rx="23" ry="18" transform="rotate(-12 303 166)"/>
+      <ellipse cx="358" cy="269" rx="37" ry="45" transform="rotate(28 358 269)"/>
+      <ellipse cx="219" cy="346" rx="25" ry="17" transform="rotate(10 219 346)"/>
+      <ellipse cx="134" cy="315" rx="20" ry="30" transform="rotate(-35 134 315)"/>
+      <ellipse cx="262" cy="248" rx="17" ry="14"/>
+    </g>
+    <g fill="#d7cac0" opacity="0.38">
+      <path d="M132 157 204 105 274 89 220 129Z"/>
+      <path d="M93 239 150 256 118 325Z"/>
+      <path d="M237 232 334 197 300 236Z"/>
+    </g>
+    <g fill="#6b5e59" opacity="0.45">
+      <circle cx="286" cy="310" r="8"/><circle cx="367" cy="153" r="10"/><circle cx="119" cy="214" r="7"/><circle cx="296" cy="392" r="11"/>
+    </g>
+    <g fill="#4d403b">
+      <path d="M53 159 80 142 102 160 92 194 59 190Z"/><path d="M56 371 96 360 125 388 108 425 67 417Z"/><path d="M412 55 444 70 447 107 411 116 388 88Z"/><path d="M420 400 456 385 485 410 472 446 429 443Z"/>
+    </g>
+  </g>
+</svg>
