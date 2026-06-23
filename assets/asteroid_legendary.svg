@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="legend" x1="70" y1="80" x2="435" y2="420" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#ffcf32"/><stop offset="0.22" stop-color="#ff38d1"/><stop offset="0.55" stop-color="#5620b0"/><stop offset="0.78" stop-color="#00d7ff"/><stop offset="1" stop-color="#0b0820"/></linearGradient>
+    <linearGradient id="gemC" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f8ffff"/><stop offset="0.35" stop-color="#22e8ff"/><stop offset="1" stop-color="#0855e8"/></linearGradient>
+    <linearGradient id="gemP" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff0ff"/><stop offset="0.35" stop-color="#ff4fff"/><stop offset="1" stop-color="#5310d0"/></linearGradient>
+    <linearGradient id="gemG" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fffbd6"/><stop offset="0.35" stop-color="#ffd91f"/><stop offset="1" stop-color="#d36b00"/></linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%"><feGaussianBlur stdDeviation="5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+  </defs>
+  <g stroke-linejoin="round">
+    <path d="M66 246 116 132 222 73 332 86 435 154 464 276 398 392 278 447 151 410 82 327Z" fill="url(#legend)" stroke="#ff63ff" stroke-opacity="0.6" stroke-width="7"/>
+    <path d="M116 132 208 164 222 73M208 164 286 122 332 86M208 164 154 259 66 246M154 259 255 240 286 122M255 240 352 207 435 154M255 240 272 335 151 410M272 335 366 318 398 392M352 207 366 318 464 276M82 327 272 335" fill="none" stroke="#090713" stroke-opacity="0.48" stroke-width="5"/>
+    <g fill="#090713" opacity="0.48"><ellipse cx="161" cy="218" rx="38" ry="30"/><ellipse cx="302" cy="171" rx="26" ry="18"/><ellipse cx="351" cy="294" rx="44" ry="35" transform="rotate(28 351 294)"/><ellipse cx="221" cy="346" rx="30" ry="19"/><ellipse cx="118" cy="302" rx="18" ry="26"/></g>
+    <g filter="url(#glow)" stroke="#ffffff" stroke-opacity="0.75" stroke-width="3">
+      <path d="M132 210 166 158 206 215 166 270Z" fill="url(#gemP)"/><path d="M240 150 286 96 336 155 294 226Z" fill="url(#gemP)"/><path d="M320 229 388 185 424 248 361 310Z" fill="url(#gemC)"/><path d="M265 310 334 272 366 340 304 397Z" fill="url(#gemG)"/><path d="M154 337 198 295 239 355 191 406Z" fill="url(#gemC)"/><path d="M382 100 410 70 438 110 405 151Z" fill="url(#gemP)"/><path d="M82 358 112 316 149 365 110 420Z" fill="url(#gemC)"/>
+    </g>
+    <g fill="#ffffff" opacity="0.9"><path d="M65 201 72 222 94 230 72 238 65 260 57 238 36 230 57 222Z"/><path d="M430 309 438 333 462 342 438 350 430 374 421 350 398 342 421 333Z"/><path d="M253 267 259 284 276 290 259 296 253 313 247 296 230 290 247 284Z"/><path d="M376 170 382 185 398 191 382 197 376 213 370 197 354 191 370 185Z"/></g>
+    <g fill="#6b22ff" stroke="#d77bff" stroke-width="2"><path d="M38 300 66 270 100 307 65 340Z"/><path d="M423 417 464 382 492 427 449 462Z"/><path d="M470 203 496 177 508 216 481 240Z"/><path d="M218 450 240 425 260 456 238 482Z"/></g>
+  </g>
+</svg>
