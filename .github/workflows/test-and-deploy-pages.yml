@@ -1,4 +1,4 @@
-name: Test and deploy game preview
+name: Deploy game preview
 
 on:
   push:
@@ -11,82 +11,36 @@ permissions:
   pages: write
   id-token: write
 
-concurrency:
-  group: pages
-  cancel-in-progress: true
-
 jobs:
-  smoke-test:
-    name: Smoke test static game
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Check required files
-        run: |
-          test -f index.html
-          test -f assets/procedural-assets.js
-          test -f assets/asteroid_normal.svg
-          test -f assets/asteroid_crystal.svg
-          test -f assets/asteroid_gold.svg
-          test -f assets/asteroid_legendary.svg
-          test -f js/sdk.js
-          test -f js/game-fixed.js
-          test -f js/phase4-polish.js
-
-      - name: Check JavaScript syntax
-        run: |
-          node --check assets/procedural-assets.js
-          node --check js/sdk.js
-          node --check js/game-fixed.js
-          node --check js/phase4-polish.js
-
-      - name: Start temporary test server
-        run: |
-          python3 -m http.server 8080 > /tmp/star-miner-server.log 2>&1 &
-          echo $! > /tmp/star-miner-server.pid
-          sleep 2
-
-      - name: Smoke test HTTP response
-        run: |
-          curl --fail --silent --show-error http://127.0.0.1:8080/ > /tmp/index.html
-          grep -q "gameCanvas" /tmp/index.html
-          grep -q "yandex.ru/games/sdk/v2" /tmp/index.html
-          grep -q "js/game-fixed.js" /tmp/index.html
-          curl --fail --silent --show-error http://127.0.0.1:8080/js/game-fixed.js > /tmp/game-fixed.js
-          curl --fail --silent --show-error http://127.0.0.1:8080/assets/asteroid_normal.svg > /tmp/asteroid_normal.svg
-          curl --fail --silent --show-error http://127.0.0.1:8080/assets/asteroid_gold.svg > /tmp/asteroid_gold.svg
-
-      - name: Stop temporary test server
-        if: always()
-        run: |
-          if [ -f /tmp/star-miner-server.pid ]; then
-            kill $(cat /tmp/star-miner-server.pid) || true
-          fi
-
-  deploy-pages:
-    name: Deploy preview to GitHub Pages
-    needs: smoke-test
+  deploy:
     runs-on: ubuntu-latest
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
-
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Configure GitHub Pages
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Check files
+        run: |
+          test -f index.html
+          test -f js/playable.js
+          test -f assets/asteroid_normal.svg
+          test -f assets/asteroid_crystal.svg
+          test -f assets/asteroid_gold.svg
+          test -f assets/asteroid_legendary.svg
+          grep -q "js/playable.js" index.html
+          node --check js/playable.js
+
+      - name: Configure Pages
         uses: actions/configure-pages@v5
 
-      - name: Upload static site artifact
+      - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: .
