@@ -33,15 +33,19 @@ jobs:
         run: |
           test -f index.html
           test -f assets/procedural-assets.js
+          test -f assets/asteroid_normal.svg
+          test -f assets/asteroid_crystal.svg
+          test -f assets/asteroid_gold.svg
+          test -f assets/asteroid_legendary.svg
           test -f js/sdk.js
-          test -f js/game.js
+          test -f js/game-fixed.js
           test -f js/phase4-polish.js
 
       - name: Check JavaScript syntax
         run: |
           node --check assets/procedural-assets.js
           node --check js/sdk.js
-          node --check js/game.js
+          node --check js/game-fixed.js
           node --check js/phase4-polish.js
 
       - name: Start temporary test server
@@ -55,8 +59,10 @@ jobs:
           curl --fail --silent --show-error http://127.0.0.1:8080/ > /tmp/index.html
           grep -q "gameCanvas" /tmp/index.html
           grep -q "yandex.ru/games/sdk/v2" /tmp/index.html
-          curl --fail --silent --show-error http://127.0.0.1:8080/js/game.js > /tmp/game.js
-          curl --fail --silent --show-error http://127.0.0.1:8080/assets/procedural-assets.js > /tmp/assets.js
+          grep -q "js/game-fixed.js" /tmp/index.html
+          curl --fail --silent --show-error http://127.0.0.1:8080/js/game-fixed.js > /tmp/game-fixed.js
+          curl --fail --silent --show-error http://127.0.0.1:8080/assets/asteroid_normal.svg > /tmp/asteroid_normal.svg
+          curl --fail --silent --show-error http://127.0.0.1:8080/assets/asteroid_gold.svg > /tmp/asteroid_gold.svg
 
       - name: Stop temporary test server
         if: always()
