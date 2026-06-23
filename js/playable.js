@@ -1,13 +1,14 @@
-/* Звёздный Старатель — онлайн-версия с настоящими PNG-астероидами пользователя. */
+/* Звёздный Старатель — онлайн-версия с PNG-астероидами и загружаемым фоном. */
 (function () {
   'use strict';
 
-  const BUILD = 'playable-png-2026-06-24-03';
+  const BUILD = 'playable-png-bg-2026-06-24-04';
   const CONFIG = {
     saveKey: 'star_miner_playable_save_v3',
     autosaveMs: 8000,
     prestigeOre: 50000,
     dustBonus: 0.04,
+    backgroundImage: 'assets/background_space_16x9.png',
     asteroidImages: {
       normal: 'assets/asteroid_normal.png',
       crystal: 'assets/asteroid_crystal.png',
@@ -45,6 +46,7 @@
   let drag = null;
   let pulse = 0;
   let images = {};
+  let backgroundImage = null;
   let state = load();
 
   window.STAR_MINER_BUILD = BUILD;
@@ -105,6 +107,11 @@
       img.onerror = () => resolve(null);
       img.src = src;
     });
+  }
+
+  async function loadBackground() {
+    backgroundImage = await loadImage(CONFIG.backgroundImage);
+    if (backgroundImage) toast('Фон космоса загружен');
   }
 
   async function loadAsteroids() {
@@ -226,6 +233,16 @@
   }
 
   function drawBackground(time) {
+    if (backgroundImage) {
+      const scale = Math.max(W / backgroundImage.width, H / backgroundImage.height);
+      const dw = backgroundImage.width * scale;
+      const dh = backgroundImage.height * scale;
+      const dx = (W - dw) / 2;
+      const dy = (H - dh) / 2;
+      ctx.drawImage(backgroundImage, dx, dy, dw, dh);
+      return;
+    }
+
     const g = ctx.createLinearGradient(0, 0, W, H);
     g.addColorStop(0, '#07112a');
     g.addColorStop(0.55, '#111548');
@@ -281,7 +298,7 @@
 
   function drawTop() {
     rect(12, 12, W - 24, 78, 20);
-    ctx.fillStyle = 'rgba(8,16,52,.92)';
+    ctx.fillStyle = 'rgba(8,16,52,.88)';
     ctx.fill();
     ctx.strokeStyle = 'rgba(43,216,255,.38)';
     ctx.stroke();
@@ -315,13 +332,13 @@
     const barY = box.y + box.r + 28;
     const p = Math.max(0, Math.min(1, state.galaxyOre / CONFIG.prestigeOre));
     rect(barX, barY, barW, 24, 12);
-    ctx.fillStyle = 'rgba(3,9,30,.9)';
+    ctx.fillStyle = 'rgba(3,9,30,.88)';
     ctx.fill();
     rect(barX + 3, barY + 3, Math.max(18, (barW - 6) * p), 18, 10);
     ctx.fillStyle = '#2bd8ff';
     ctx.fill();
     label(fmt(state.galaxyOre) + ' / ' + fmt(CONFIG.prestigeOre), W / 2, barY + 12, 12, '#fff', 'center');
-    label('Тапайте астероид', W / 2, barY + 58, 18, '#b8c6ff', 'center');
+    label('Тапайте астероид', W / 2, barY + 58, 18, '#dbe7ff', 'center');
   }
 
   function drawBottom() {
@@ -329,7 +346,7 @@
     const gap = 8;
     const bw = (W - 40 - gap * 4) / 5;
     rect(10, y, W - 20, 98, 22);
-    ctx.fillStyle = 'rgba(6,12,37,.92)';
+    ctx.fillStyle = 'rgba(6,12,37,.9)';
     ctx.fill();
     const items = [
       ['Апгрейды', () => { modal = 'shop'; scroll = 0; }],
@@ -491,6 +508,7 @@
     resize();
     if (state.daily.date !== today()) modal = 'daily';
     requestAnimationFrame(frame);
+    loadBackground();
     loadAsteroids();
     toast('Игра запущена: ' + BUILD);
   }
