@@ -1,542 +1,122 @@
 /*
-  Звёздный Старатель — Фаза 2: игровое ядро.
-  Чистый Canvas + JavaScript. Без сборщика, без зависимостей.
-  Все игровые числа вынесены в CONFIG, чтобы баланс можно было менять без поиска по коду.
+  Звёздный Старатель — Фаза 3.
+  Главное: весь баланс в CONFIG, SDK Яндекс Игр через js/sdk.js, graceful fallback.
 */
 (function () {
   'use strict';
 
-  // ============================================================================
-  // CONFIG: баланс, тайминги, формулы и награды.
-  // ============================================================================
   const CONFIG = {
-    save: { version: 1, key: 'star_miner_save_v1', autosaveMs: 15000 },
+    save: { version: 3, key: 'star_miner_save_v3', oldKeys: ['star_miner_save_v2', 'star_miner_save_v1'], autosaveMs: 15000 },
+    yandex: { leaderboardName: 'star_dust', fullscreenCooldownMs: 4 * 60 * 1000 },
+    remoteFlags: { oreMultiplier: '1', tapMultiplier: '1', prestigeUnlockOre: '50000', rewardedCrystalAmount: '12' },
     start: { ore: 0, crystals: 15, starDust: 0, drones: 1 },
-    mining: {
-      baseTap: 1,                  // руда за тап без апгрейдов
-      baseDronePerSec: 0.25,       // добыча одного дрона в секунду
-      critChancePerLevel: 0.015,   // шанс критического тапа за уровень
-      critMultiplier: 6            // множитель критического тапа
+    mining: { baseTap: 1, baseDronePerSec: 0.25, critChancePerLevel: 0.015, critMultiplier: 6 },
+    economy: { costGrowth: 1.17, discountPerLevel: 0.018, minCostFactor: 0.35 },
+    prestige: { unlockOre: 50000, baseDustGain: 8, orePower: 0.5, dustBonus: 0.04, scannerBonus: 0.03, rewardedDustBonus: 0.5 },
+    offline: { capSeconds: 8 * 60 * 60, incomeFactor: 0.65, minSecondsToShow: 60 },
+    ads: { incomeBoostSeconds: 4 * 60 * 60, freeCrystalsDaily: 12 },
+    daily: [{ ore: 120, crystals: 1 }, { ore: 450, crystals: 1 }, { ore: 1200, crystals: 2 }, { ore: 3000, crystals: 2 }, { ore: 7500, crystals: 3 }, { ore: 16000, crystals: 4 }, { ore: 35000, crystals: 6 }],
+    iap: {
+      noads: { id: 'noads', type: 'permanent' }, starter_pack: { id: 'starter_pack', type: 'consumable', crystals: 120, ore: 25000 },
+      crystals_small: { id: 'crystals_small', type: 'consumable', crystals: 80 }, crystals_big: { id: 'crystals_big', type: 'consumable', crystals: 450 },
+      drill_skin_neon: { id: 'drill_skin_neon', type: 'permanent', skin: 'neon' }
     },
-    economy: {
-      costGrowth: 1.17,            // рост цены по умолчанию
-      discountPerLevel: 0.018,     // скидка от торгового модуля
-      minCostFactor: 0.35          // цена не падает ниже 35% от базовой кривой
-    },
-    prestige: {
-      unlockOre: 50000,            // руда в текущей галактике для первого прыжка
-      baseDustGain: 8,             // база формулы пыли
-      orePower: 0.5,               // 0.5 = квадратный корень, мягкий рост
-      dustBonus: 0.04,             // +4% ко всей добыче за 1 звёздную пыль
-      scannerBonus: 0.03           // +3% пыли за уровень сканера
-    },
-    offline: {
-      capSeconds: 8 * 60 * 60,     // максимум оффлайн-дохода: 8 часов
-      incomeFactor: 0.65,          // оффлайн менее выгоден, чем онлайн
-      minSecondsToShow: 60         // окно оффлайна показывается от 1 минуты
-    },
-    daily: [
-      { ore: 120, crystals: 1 },
-      { ore: 450, crystals: 1 },
-      { ore: 1200, crystals: 2 },
-      { ore: 3000, crystals: 2 },
-      { ore: 7500, crystals: 3 },
-      { ore: 16000, crystals: 4 },
-      { ore: 35000, crystals: 6 }
-    ],
     upgrades: [
-      { id: 'tap', name: 'Усилитель бура', desc: '+1 руда за тап', max: 200, cost: 15, growth: 1.16, tapAdd: 1, icon: 'icon_upgrade' },
-      { id: 'drones', name: 'Новые дроны', desc: '+1 добывающий дрон', max: 120, cost: 60, growth: 1.18, dronesAdd: 1, icon: 'drone_basic' },
-      { id: 'dronePower', name: 'Лазерные резцы', desc: '+0.18 руды/сек к дрону', max: 160, cost: 95, growth: 1.17, droneAdd: 0.18, icon: 'effect_spark' },
-      { id: 'droneSpeed', name: 'Разгон двигателей', desc: '+6% скорости дронов', max: 120, cost: 180, growth: 1.18, speed: 0.06, icon: 'effect_tap_burst' },
-      { id: 'mult', name: 'Рудный анализатор', desc: '+8% ко всей добыче', max: 100, cost: 550, growth: 1.22, global: 0.08, icon: 'currency_ore' },
-      { id: 'crit', name: 'Критические трещины', desc: '+1.5% шанс крит. тапа', max: 50, cost: 1300, growth: 1.24, icon: 'effect_spark' },
-      { id: 'discount', name: 'Торговый модуль', desc: 'Снижает цены апгрейдов', max: 50, cost: 2600, growth: 1.25, icon: 'icon_shop' },
-      { id: 'offline', name: 'Ночная смена', desc: '+4% к оффлайн-доходу', max: 40, cost: 6000, growth: 1.28, offline: 0.04, icon: 'icon_daily' },
-      { id: 'scanner', name: 'Сканер галактик', desc: '+3% пыли при прыжке', max: 60, cost: 15000, growth: 1.30, icon: 'icon_prestige' },
-      { id: 'crystal', name: 'Кристальный фильтр', desc: 'Кристаллы за крупную добычу', max: 25, cost: 50000, growth: 1.34, icon: 'currency_crystal' }
+      { id: 'tap', n: ['Усилитель бура', 'Drill Booster'], d: ['+1 руда за тап', '+1 ore per tap'], max: 200, cost: 15, g: 1.16, tap: 1, icon: 'icon_upgrade' },
+      { id: 'drones', n: ['Новые дроны', 'More Drones'], d: ['+1 добывающий дрон', '+1 mining drone'], max: 120, cost: 60, g: 1.18, drones: 1, icon: 'drone_basic' },
+      { id: 'dronePower', n: ['Лазерные резцы', 'Laser Cutters'], d: ['+0.18 руды/сек к дрону', '+0.18 ore/sec per drone'], max: 160, cost: 95, g: 1.17, dronePower: 0.18, icon: 'effect_spark' },
+      { id: 'droneSpeed', n: ['Разгон двигателей', 'Engine Tuning'], d: ['+6% скорости дронов', '+6% drone speed'], max: 120, cost: 180, g: 1.18, speed: 0.06, icon: 'effect_tap_burst' },
+      { id: 'mult', n: ['Рудный анализатор', 'Ore Analyzer'], d: ['+8% ко всей добыче', '+8% all income'], max: 100, cost: 550, g: 1.22, global: 0.08, icon: 'currency_ore' },
+      { id: 'crit', n: ['Критические трещины', 'Critical Cracks'], d: ['+1.5% шанс крит. тапа', '+1.5% critical tap chance'], max: 50, cost: 1300, g: 1.24, icon: 'effect_spark' },
+      { id: 'discount', n: ['Торговый модуль', 'Trade Module'], d: ['Снижает цены апгрейдов', 'Lowers prices'], max: 50, cost: 2600, g: 1.25, icon: 'icon_shop' },
+      { id: 'offline', n: ['Ночная смена', 'Night Shift'], d: ['+4% к оффлайн-доходу', '+4% offline income'], max: 40, cost: 6000, g: 1.28, offline: 0.04, icon: 'icon_daily' },
+      { id: 'scanner', n: ['Сканер галактик', 'Galaxy Scanner'], d: ['+3% пыли при прыжке', '+3% dust on jump'], max: 60, cost: 15000, g: 1.30, icon: 'icon_prestige' },
+      { id: 'crystal', n: ['Кристальный фильтр', 'Crystal Filter'], d: ['Кристаллы за крупную добычу', 'Crystals from income'], max: 25, cost: 50000, g: 1.34, icon: 'currency_crystal' }
     ],
     achievements: [
-      { id: 'tap1', name: 'Первый удар', desc: 'Тапните астероид', value: 'taps', target: 1, crystals: 1 },
-      { id: 'ore1k', name: 'Тысяча руды', desc: 'Добудьте 1K руды всего', value: 'totalOre', target: 1000, crystals: 2 },
-      { id: 'ore1m', name: 'Миллионер', desc: 'Добудьте 1M руды всего', value: 'totalOre', target: 1000000, crystals: 5 },
-      { id: 'drones5', name: 'Рой помощников', desc: 'Получите 5 дронов', value: 'drones', target: 5, crystals: 2 },
-      { id: 'up20', name: 'Инженер', desc: 'Купите 20 уровней апгрейдов', value: 'upgradeLevels', target: 20, crystals: 3 },
-      { id: 'prestige1', name: 'Новая галактика', desc: 'Сделайте первый прыжок', value: 'prestiges', target: 1, crystals: 6 },
-      { id: 'dust100', name: 'Звёздный след', desc: 'Накопите 100 пыли', value: 'starDust', target: 100, crystals: 8 },
-      { id: 'daily3', name: 'Возвращение', desc: 'Заберите ежедневку 3 дня', value: 'dailyStreak', target: 3, crystals: 3 }
+      { id: 'tap1', n: ['Первый удар', 'First Strike'], d: ['Тапните астероид', 'Tap the asteroid'], v: 'taps', t: 1, c: 1 },
+      { id: 'ore1k', n: ['Тысяча руды', 'One Thousand Ore'], d: ['Добудьте 1K руды всего', 'Mine 1K total ore'], v: 'totalOre', t: 1000, c: 2 },
+      { id: 'ore1m', n: ['Миллионер', 'Millionaire'], d: ['Добудьте 1M руды всего', 'Mine 1M total ore'], v: 'totalOre', t: 1000000, c: 5 },
+      { id: 'drones5', n: ['Рой помощников', 'Helper Swarm'], d: ['Получите 5 дронов', 'Own 5 drones'], v: 'drones', t: 5, c: 2 },
+      { id: 'up20', n: ['Инженер', 'Engineer'], d: ['Купите 20 уровней апгрейдов', 'Buy 20 upgrade levels'], v: 'upgradeLevels', t: 20, c: 3 },
+      { id: 'prestige1', n: ['Новая галактика', 'New Galaxy'], d: ['Сделайте первый прыжок', 'Make the first jump'], v: 'prestiges', t: 1, c: 6 },
+      { id: 'dust100', n: ['Звёздный след', 'Star Trail'], d: ['Накопите 100 пыли', 'Collect 100 dust'], v: 'starDust', t: 100, c: 8 },
+      { id: 'daily3', n: ['Возвращение', 'Comeback'], d: ['Заберите ежедневку 3 дня', 'Claim 3 days'], v: 'dailyStreak', t: 3, c: 3 }
     ]
   };
 
-  const TEXT = {
-    ore: 'Руда', crystals: 'Кристаллы', dust: 'Пыль', shop: 'Апгрейды', jump: 'Прыжок',
-    ach: 'Достижения', daily: 'Ежедневно', settings: 'Настройки', buy: 'Купить', max: 'Макс.',
-    close: 'Закрыть', collect: 'Забрать', notEnough: 'Не хватает руды', saved: 'Сохранено'
-  };
+  const L = { ru: { ore: 'Руда', crystals: 'Кристаллы', dust: 'Пыль', shop: 'Апгрейды', jump: 'Прыжок', daily: 'Ежедневно', leaders: 'Лидеры', settings: 'Настройки', ach: 'Достижения', store: 'Бонусы и покупки', buy: 'Купить', collect: 'Забрать', max: 'Макс.', noOre: 'Не хватает руды', tap: 'Тапайте астероид', need: 'Нужно больше руды', offline: 'Дроны добыли без вас:', adFail: 'Реклама недоступна', incomeAd: '×2 доход на 4 часа', dustAd: '+50% пыли за рекламу', dustReady: '+50% к прыжку готово', freeCrystals: 'Бесплатные кристаллы', cloud: 'Облачное сохранение', guest: 'Гость: localStorage', local: 'SDK недоступен', noads: 'Реклама отключена', banner: 'Sticky-баннер', sound: 'Звук', on: 'вкл', off: 'выкл', reset: 'Сбросить прогресс', emptyLb: 'Лидерборд пока недоступен', purchaseOk: 'Покупка начислена', purchaseFail: 'Покупка не завершена', already: 'Уже получено сегодня' }, en: { ore: 'Ore', crystals: 'Crystals', dust: 'Dust', shop: 'Upgrades', jump: 'Jump', daily: 'Daily', leaders: 'Leaders', settings: 'Settings', ach: 'Achievements', store: 'Boosts & purchases', buy: 'Buy', collect: 'Collect', max: 'Max', noOre: 'Not enough ore', tap: 'Tap asteroid', need: 'Need more ore', offline: 'Drones mined away:', adFail: 'Ad unavailable', incomeAd: '×2 income for 4 hours', dustAd: '+50% dust for ad', dustReady: '+50% jump ready', freeCrystals: 'Free crystals', cloud: 'Cloud save', guest: 'Guest: localStorage', local: 'SDK unavailable', noads: 'Ads removed', banner: 'Sticky banner', sound: 'Sound', on: 'on', off: 'off', reset: 'Reset progress', emptyLb: 'Leaderboard unavailable', purchaseOk: 'Purchase granted', purchaseFail: 'Purchase failed', already: 'Already claimed today' } };
 
-  const canvas = document.getElementById('gameCanvas');
-  const ctx = canvas.getContext('2d');
-  const TAU = Math.PI * 2;
-  let W = 1, H = 1, DPR = 1, last = performance.now(), autosaveAt = performance.now();
-  let assets = window.StarMinerProceduralAssets ? window.StarMinerProceduralAssets.createAssets().sprites : {};
-  let buttons = [], floaters = [], toasts = [], modal = null, modalScroll = 0, drag = null, pendingOffline = null;
-  let tapPulse = 0, crystalBucket = 0;
+  const canvas = document.getElementById('gameCanvas'), ctx = canvas.getContext('2d'), SDK = window.StarMinerSDK;
+  let a = window.StarMinerProceduralAssets ? window.StarMinerProceduralAssets.createAssets().sprites : {}, lang = 'ru', W = 1, H = 1, DPR = 1, state, ui = [], modal = 'loading', scroll = 0, drag = null, offline = null, lb = [], catalog = {}, toast = [], floats = [], last = performance.now(), auto = performance.now(), pulse = 0, paused = false, status = '';
+  const t = k => (L[lang] && L[lang][k]) || L.ru[k] || k, n = arr => arr[lang === 'ru' ? 0 : 1], day = () => new Date().toISOString().slice(0, 10);
 
-  function defaultSave() {
-    const upgrades = {};
-    CONFIG.upgrades.forEach(u => upgrades[u.id] = 0);
-    return {
-      version: CONFIG.save.version,
-      ore: CONFIG.start.ore,
-      crystals: CONFIG.start.crystals,
-      starDust: CONFIG.start.starDust,
-      totalOre: 0,
-      galaxyOre: 0,
-      taps: 0,
-      prestiges: 0,
-      upgradeLevels: 0,
-      upgrades,
-      achievements: {},
-      daily: { streak: 0, lastDate: '', pending: false },
-      settings: { sound: false },
-      lastSaveTime: Date.now()
-    };
-  }
+  function fresh() { const u = {}; CONFIG.upgrades.forEach(x => u[x.id] = 0); return { version: CONFIG.save.version, ore: CONFIG.start.ore, crystals: CONFIG.start.crystals, starDust: CONFIG.start.starDust, totalOre: 0, galaxyOre: 0, taps: 0, prestiges: 0, upgradeLevels: 0, upgrades: u, achievements: {}, daily: { streak: 0, lastDate: '', pending: false }, boosts: { incomeUntil: 0, dustAdReady: false }, purchases: { noads: false, skins: {} }, ads: { crystalDate: '' }, settings: { sound: false, banner: true }, selectedSkin: 'basic', reviewAsked: false, lastSaveTime: Date.now() }; }
+  function migrate(x) { const f = fresh(); if (!x) return f; return { ...f, ...x, upgrades: { ...f.upgrades, ...(x.upgrades || {}) }, achievements: { ...f.achievements, ...(x.achievements || {}) }, daily: { ...f.daily, ...(x.daily || {}) }, boosts: { ...f.boosts, ...(x.boosts || {}) }, purchases: { ...f.purchases, ...(x.purchases || {}), skins: { ...f.purchases.skins, ...((x.purchases || {}).skins || {}) } }, ads: { ...f.ads, ...(x.ads || {}) }, settings: { ...f.settings, ...(x.settings || {}) }, version: CONFIG.save.version }; }
+  async function load() { let x = SDK ? await SDK.loadSave(CONFIG.save.key, migrate) : null; if (!x && SDK) for (const k of CONFIG.save.oldKeys) { const o = SDK.readLocal(k); if (o) { x = o; break; } } state = migrate(x); }
+  function save(flush) { if (!state || !SDK) return; state.lastSaveTime = Date.now(); SDK.save(CONFIG.save.key, state, { starDust: Math.floor(state.starDust), totalOre: Math.floor(state.totalOre), crystals: Math.floor(state.crystals), prestiges: state.prestiges }, !!flush); }
+  function flags(f) { f = f || {}; const om = +f.oreMultiplier, tm = +f.tapMultiplier, po = +f.prestigeUnlockOre, rc = +f.rewardedCrystalAmount; if (om > 0) CONFIG.mining.baseDronePerSec *= om; if (tm > 0) CONFIG.mining.baseTap *= tm; if (po > 1000) CONFIG.prestige.unlockOre = po; if (rc > 0) CONFIG.ads.freeCrystalsDaily = rc; }
 
-  function load() {
-    try {
-      const raw = localStorage.getItem(CONFIG.save.key);
-      const data = raw ? JSON.parse(raw) : null;
-      const fresh = defaultSave();
-      if (!data) return fresh;
-      return {
-        ...fresh,
-        ...data,
-        upgrades: { ...fresh.upgrades, ...(data.upgrades || {}) },
-        achievements: { ...fresh.achievements, ...(data.achievements || {}) },
-        daily: { ...fresh.daily, ...(data.daily || {}) },
-        settings: { ...fresh.settings, ...(data.settings || {}) },
-        version: CONFIG.save.version
-      };
-    } catch (e) {
-      console.warn('Ошибка загрузки сохранения:', e);
-      return defaultSave();
-    }
-  }
-
-  let state = load();
-
-  function save() {
-    try {
-      state.lastSaveTime = Date.now();
-      localStorage.setItem(CONFIG.save.key, JSON.stringify(state));
-      return true;
-    } catch (e) {
-      console.warn('Ошибка сохранения:', e);
-      return false;
-    }
-  }
-
-  function resize() {
-    DPR = Math.min(2, Math.max(1, window.devicePixelRatio || 1));
-    W = Math.max(320, Math.floor(innerWidth));
-    H = Math.max(480, Math.floor(innerHeight));
-    canvas.width = Math.floor(W * DPR);
-    canvas.height = Math.floor(H * DPR);
-    canvas.style.width = W + 'px';
-    canvas.style.height = H + 'px';
-    ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  }
-
-  function fmt(n) {
-    if (!isFinite(n)) return '0';
-    const units = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc'];
-    let u = 0;
-    while (Math.abs(n) >= 1000 && u < units.length - 1) { n /= 1000; u++; }
-    const d = Math.abs(n) >= 100 ? 0 : Math.abs(n) >= 10 ? 1 : u ? 2 : 0;
-    return n.toFixed(d).replace(/\.0+$|(?<=\.\d)0+$/g, '') + units[u];
-  }
-
-  function rect(x, y, w, h, r = 14) {
-    ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.arcTo(x + w, y, x + w, y + h, r);
-    ctx.arcTo(x + w, y + h, x, y + h, r);
-    ctx.arcTo(x, y + h, x, y, r);
-    ctx.arcTo(x, y, x + w, y, r);
-    ctx.closePath();
-  }
-
-  function text(str, x, y, size, color = '#f4f7ff', align = 'left', weight = '700') {
-    ctx.font = `${weight} ${size}px Arial, sans-serif`;
-    ctx.textAlign = align;
-    ctx.textBaseline = 'middle';
-    ctx.fillStyle = color;
-    ctx.fillText(str, x, y);
-  }
-
-  function lvl(id) { return state.upgrades[id] || 0; }
-  function up(id) { return CONFIG.upgrades.find(u => u.id === id); }
+  function fmt(x) { const u = ['', 'K', 'M', 'B', 'T', 'Qa', 'Qi']; let i = 0; while (Math.abs(x) >= 1000 && i < u.length - 1) { x /= 1000; i++; } return (i ? x.toFixed(x < 10 ? 2 : x < 100 ? 1 : 0) : Math.floor(x)).replace(/\.0$/, '') + u[i]; }
+  function lvl(id) { return state.upgrades[id] || 0; } function up(id) { return CONFIG.upgrades.find(x => x.id === id); }
   function discount() { return Math.max(CONFIG.economy.minCostFactor, 1 - lvl('discount') * CONFIG.economy.discountPerLevel); }
-  function cost(u) { return Math.floor(u.cost * Math.pow(u.growth || CONFIG.economy.costGrowth, lvl(u.id)) * discount()); }
+  function cost(u) { return Math.floor(u.cost * Math.pow(u.g || CONFIG.economy.costGrowth, lvl(u.id)) * discount()); }
+  function boost() { return Date.now() < state.boosts.incomeUntil ? 2 : 1; }
   function drones() { return CONFIG.start.drones + lvl('drones'); }
-  function mult() { return 1 + state.starDust * CONFIG.prestige.dustBonus + lvl('mult') * up('mult').global; }
-  function tapPower() { return (CONFIG.mining.baseTap + lvl('tap') * up('tap').tapAdd) * mult(); }
-  function dps() {
-    const power = CONFIG.mining.baseDronePerSec + lvl('dronePower') * up('dronePower').droneAdd;
-    const speed = 1 + lvl('droneSpeed') * up('droneSpeed').speed;
-    return drones() * power * speed * mult();
-  }
+  function mult() { return (1 + state.starDust * CONFIG.prestige.dustBonus + lvl('mult') * up('mult').global) * boost(); }
+  function tapPower() { return (CONFIG.mining.baseTap + lvl('tap') * up('tap').tap) * mult(); }
+  function dps() { return drones() * (CONFIG.mining.baseDronePerSec + lvl('dronePower') * up('dronePower').dronePower) * (1 + lvl('droneSpeed') * up('droneSpeed').speed) * mult(); }
   function offlineDps() { return dps() * CONFIG.offline.incomeFactor * (1 + lvl('offline') * up('offline').offline); }
-  function dustGain() {
-    if (state.galaxyOre < CONFIG.prestige.unlockOre) return 0;
-    const base = Math.pow(state.galaxyOre / CONFIG.prestige.unlockOre, CONFIG.prestige.orePower) * CONFIG.prestige.baseDustGain;
-    return Math.max(1, Math.floor(base * (1 + lvl('scanner') * CONFIG.prestige.scannerBonus)));
-  }
+  function dustBase() { if (state.galaxyOre < CONFIG.prestige.unlockOre) return 0; return Math.max(1, Math.floor(Math.pow(state.galaxyOre / CONFIG.prestige.unlockOre, CONFIG.prestige.orePower) * CONFIG.prestige.baseDustGain * (1 + lvl('scanner') * CONFIG.prestige.scannerBonus))); }
+  function dustGain() { const b = dustBase(); return state.boosts.dustAdReady ? Math.floor(b * (1 + CONFIG.prestige.rewardedDustBonus)) : b; }
+  function addOre(x) { if (x <= 0) return; state.ore += x; state.totalOre += x; state.galaxyOre += x; }
+  function buy(id) { const u = up(id), c = cost(u); if (lvl(id) >= u.max) return say(t('max')); if (state.ore < c) return say(t('noOre')); state.ore -= c; state.upgrades[id]++; state.upgradeLevels++; pop('UP!', W / 2, H / 2, '#6ceb49'); checkAch(); save(false); }
+  function mine(x, y) { let v = tapPower(); if (Math.random() < lvl('crit') * CONFIG.mining.critChancePerLevel) v *= CONFIG.mining.critMultiplier; addOre(v); state.taps++; pulse = 1; pop('+' + fmt(v), x, y - 30, '#2bd8ff'); checkAch(); }
+  function jump() { const g = dustGain(); if (!g) return say(t('need')); save(true); state.starDust += g; state.prestiges++; state.ore = 0; state.galaxyOre = 0; CONFIG.upgrades.forEach(u => state.upgrades[u.id] = 0); state.boosts.dustAdReady = false; modal = null; say('+' + fmt(g) + ' ' + t('dust')); checkAch(); save(true); if (SDK) { SDK.submitLeaderboard(CONFIG.yandex.leaderboardName, state.starDust, 'Prestige ' + state.prestiges); if (!state.reviewAsked && state.prestiges >= 3) { state.reviewAsked = true; SDK.requestReview(); } if (!state.purchases.noads) SDK.showFullscreen({ cooldownMs: CONFIG.yandex.fullscreenCooldownMs, noAds: state.purchases.noads }); } }
+  function checkAch() { CONFIG.achievements.forEach(x => { if (state.achievements[x.id]) return; let v = x.v === 'drones' ? drones() : x.v === 'dailyStreak' ? state.daily.streak : state[x.v]; if (v >= x.t) { state.achievements[x.id] = true; state.crystals += x.c; say(t('ach') + ': +' + x.c); } }); }
+  function daily() { if (!state.daily.pending) return say(t('already')); const r = CONFIG.daily[Math.min(state.daily.streak, CONFIG.daily.length - 1)]; addOre(r.ore); state.crystals += r.crystals; state.daily.streak++; state.daily.lastDate = day(); state.daily.pending = false; modal = null; say('+' + fmt(r.ore) + ', +' + r.crystals); save(true); }
+  function calcOffline() { const s = Math.floor((Date.now() - (state.lastSaveTime || Date.now())) / 1000); if (s >= CONFIG.offline.minSecondsToShow) { const c = Math.min(s, CONFIG.offline.capSeconds), g = offlineDps() * c; if (g > 1) { offline = { sec: c, gain: g }; modal = 'offline'; } } }
+  function claimOffline(k) { if (!offline) return; addOre(offline.gain * k); say('+' + fmt(offline.gain * k)); offline = null; modal = null; save(true); }
+  function reward(kind) { if (!SDK) return say(t('adFail')); paused = true; save(true); const ok = SDK.showRewarded(() => { if (kind === 'income') { state.boosts.incomeUntil = Math.max(Date.now(), state.boosts.incomeUntil || 0) + CONFIG.ads.incomeBoostSeconds * 1000; say(t('incomeAd')); } if (kind === 'offline') claimOffline(2); if (kind === 'dust') { state.boosts.dustAdReady = true; say(t('dustReady')); } if (kind === 'crystals') { state.crystals += CONFIG.ads.freeCrystalsDaily; state.ads.crystalDate = day(); say('+' + CONFIG.ads.freeCrystalsDaily + ' ' + t('crystals')); } save(true); }, () => { paused = false; }, () => { paused = false; say(t('adFail')); }); if (!ok) { paused = false; say(t('adFail')); } }
+  async function initPurchases() { if (!SDK) return; (SDK.state.catalog || []).forEach(p => catalog[p.id] = p); const ps = await SDK.refreshPurchases(); for (const p of ps) grant(p, CONFIG.iap[p.productID] && CONFIG.iap[p.productID].type === 'consumable'); await SDK.syncBanner(state.settings.banner, state.purchases.noads); }
+  function grant(p, consume) { const id = p && (p.productID || p.id), item = CONFIG.iap[id]; if (!item) return; if (id === 'noads') { state.purchases.noads = true; SDK.syncBanner(false, true); } if (item.skin) { state.purchases.skins[item.skin] = true; state.selectedSkin = item.skin; } if (item.crystals) state.crystals += item.crystals; if (item.ore) addOre(item.ore); say(t('purchaseOk')); save(true); if (consume && p.purchaseToken) SDK.consumePurchase(p.purchaseToken); }
+  async function buyProduct(id) { if (!SDK || !SDK.state.paymentsAvailable) return say(t('purchaseFail')); paused = true; SDK.gameplayStop(); try { grant(await SDK.purchase(id), CONFIG.iap[id].type === 'consumable'); } catch (_) { say(t('purchaseFail')); } paused = false; SDK.gameplayStart(); }
+  async function showLb() { modal = 'leader'; lb = SDK ? await SDK.getLeaderboard(CONFIG.yandex.leaderboardName) : []; }
 
-  function addOre(amount) {
-    if (amount <= 0 || !isFinite(amount)) return;
-    state.ore += amount;
-    state.totalOre += amount;
-    state.galaxyOre += amount;
-    if (lvl('crystal') > 0) {
-      crystalBucket += amount;
-      const threshold = Math.max(25000, 250000 / lvl('crystal'));
-      while (crystalBucket >= threshold) {
-        crystalBucket -= threshold;
-        state.crystals += 1;
-        toast('+1 кристалл');
-      }
-    }
-  }
+  function r(x, y, w, h, rad = 14) { ctx.beginPath(); ctx.moveTo(x + rad, y); ctx.arcTo(x + w, y, x + w, y + h, rad); ctx.arcTo(x + w, y + h, x, y + h, rad); ctx.arcTo(x, y + h, x, y, rad); ctx.arcTo(x, y, x + w, y, rad); ctx.closePath(); }
+  function txt(s, x, y, size, col = '#fff', align = 'left') { ctx.font = '800 ' + size + 'px Arial'; ctx.textAlign = align; ctx.textBaseline = 'middle'; ctx.fillStyle = col; ctx.fillText(s, x, y); }
+  function button(id, x, y, w, h, label, fn, color) { r(x, y, w, h, 16); ctx.fillStyle = color || 'rgba(32,158,228,.85)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.stroke(); txt(label, x + w / 2, y + h / 2, Math.min(16, h * .42), '#fff', 'center'); ui.push({ id, x, y, w, h, fn }); }
+  function say(s) { toast.push({ s, life: 2.3 }); if (toast.length > 4) toast.shift(); }
+  function pop(s, x, y, c) { floats.push({ s, x, y, c, life: .8 }); }
+  function resize() { DPR = Math.min(2, devicePixelRatio || 1); W = Math.max(320, innerWidth); H = Math.max(480, innerHeight); canvas.width = W * DPR; canvas.height = H * DPR; canvas.style.width = W + 'px'; canvas.style.height = H + 'px'; ctx.setTransform(DPR, 0, 0, DPR, 0, 0); }
+  function bg(time) { const b = a.background_space; if (b) { const s = Math.max(W / b.width, H / b.height); ctx.drawImage(b, (W - b.width * s) / 2, (H - b.height * s) / 2, b.width * s, b.height * s); } else { ctx.fillStyle = '#05081c'; ctx.fillRect(0, 0, W, H); } ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(0, 0, W, H); }
+  function top() { r(12, 12, W - 24, 82, 20); ctx.fillStyle = 'rgba(10,19,54,.9)'; ctx.fill(); cur(22, 52, 'currency_ore', t('ore'), state.ore); cur(W * .36, 52, 'currency_crystal', t('crystals'), state.crystals); cur(W * .68, 52, 'currency_dust', t('dust'), state.starDust); txt(fmt(dps()) + '/sec' + (boost() > 1 ? ' x2' : ''), W - 24, 88, 13, '#6ceb49', 'right'); }
+  function cur(x, y, icon, label, val) { if (a[icon]) ctx.drawImage(a[icon], x, y - 22, 40, 40); txt(label, x + 46, y - 10, 11, '#9fb0dc'); txt(fmt(val), x + 46, y + 12, 18); }
+  function scene(time) { const cx = W / 2, cy = 112 + (H - 240) * .43, rad = Math.max(86, Math.min(160, Math.min(W, H) * .22)); const spr = a[state.galaxyOre > CONFIG.prestige.unlockOre * 1.25 ? 'asteroid_gold' : state.galaxyOre > CONFIG.prestige.unlockOre * .4 ? 'asteroid_crystal' : 'asteroid_normal']; const drone = a[state.selectedSkin === 'neon' ? 'drone_plasma' : 'drone_basic']; for (let i = 0; i < Math.min(drones(), 8) && drone; i++) { const ang = i * 6.283 / Math.min(drones(), 8) + time * .00045, x = cx + Math.cos(ang) * rad * 1.4, y = cy + Math.sin(ang) * rad * .72; ctx.drawImage(drone, x - 34, y - 22, 68, 44); } if (spr) ctx.drawImage(spr, cx - rad * (1 + pulse * .05), cy - rad * (1 + pulse * .05), rad * 2 * (1 + pulse * .05), rad * 2 * (1 + pulse * .05)); const bw = Math.min(520, W * .75), x = (W - bw) / 2, y = cy + rad + 35, q = Math.min(1, state.galaxyOre / CONFIG.prestige.unlockOre); r(x, y, bw, 24, 12); ctx.fillStyle = '#07102e'; ctx.fill(); r(x + 3, y + 3, (bw - 6) * q, 18, 10); ctx.fillStyle = '#2bd8ff'; ctx.fill(); txt(fmt(state.galaxyOre) + '/' + fmt(CONFIG.prestige.unlockOre), W / 2, y + 12, 12, '#fff', 'center'); txt(t('tap'), W / 2, y + 58, 18, '#9fb0dc', 'center'); ui.push({ id: 'asteroid', x: cx - rad, y: cy - rad, w: rad * 2, h: rad * 2, fn: p => mine(p.x, p.y) }); pulse = Math.max(0, pulse - .08); }
+  function bottom() { const y = H - 110, names = [[t('shop'), 'icon_upgrade', () => open('shop')], [t('jump'), 'icon_prestige', () => open('jump')], [t('daily'), 'icon_daily', () => open('daily')], [t('leaders'), 'icon_leaderboard', showLb], [t('settings'), 'icon_settings', () => open('settings')]], gap = 6, bw = (W - 38 - gap * 4) / 5; r(10, y, W - 20, 100, 22); ctx.fillStyle = 'rgba(6,12,37,.88)'; ctx.fill(); names.forEach((it, i) => { const x = 19 + i * (bw + gap); r(x, y + 12, bw, 76, 16); ctx.fillStyle = it[0] === t('jump') && dustGain() ? 'rgba(255,185,35,.35)' : 'rgba(28,42,92,.9)'; ctx.fill(); if (a[it[1]]) ctx.drawImage(a[it[1]], x + bw / 2 - 18, y + 20, 36, 36); txt(it[0], x + bw / 2, y + 74, bw < 70 ? 10 : 12, '#fff', 'center'); ui.push({ x, y: y + 12, w: bw, h: 76, fn: it[2] }); }); }
+  function open(m) { modal = m; scroll = 0; }
+  function box() { const w = Math.min(760, W - 24), h = Math.min(H - 56, 620); return { x: (W - w) / 2, y: (H - h) / 2, w, h }; }
+  function modalDraw() { if (!modal) return; ctx.fillStyle = 'rgba(0,0,0,.58)'; ctx.fillRect(0, 0, W, H); const b = box(); r(b.x, b.y, b.w, b.h, 24); ctx.fillStyle = 'rgba(27,40,92,.96)'; ctx.fill(); button('close', b.x + b.w - 78, b.y + 14, 58, 38, '×', () => modal = null); const title = { shop: t('shop'), jump: t('jump'), daily: t('daily'), settings: t('settings'), ach: t('ach'), store: t('store'), leader: t('leaders'), offline: 'Offline', loading: 'Loading' }[modal] || ''; txt(title, b.x + 24, b.y + 34, 24); if (modal === 'shop') shop(b); if (modal === 'jump') jumpWin(b); if (modal === 'daily') dailyWin(b); if (modal === 'offline') offWin(b); if (modal === 'settings') settings(b); if (modal === 'ach') ach(b); if (modal === 'store') store(b); if (modal === 'leader') leaders(b); }
+  function shop(b) { let y = b.y + 76 - scroll; CONFIG.upgrades.forEach(u => { if (y > b.y + 60 && y < b.y + b.h - 20) { r(b.x + 18, y, b.w - 36, 68, 16); ctx.fillStyle = 'rgba(12,24,61,.88)'; ctx.fill(); if (a[u.icon]) ctx.drawImage(a[u.icon], b.x + 28, y + 10, 48, 48); txt(n(u.n), b.x + 86, y + 18, 16); txt(n(u.d), b.x + 86, y + 40, 12, '#9fb0dc'); txt('Lv ' + lvl(u.id) + '/' + u.max, b.x + 86, y + 58, 12, '#ffb923'); button('buy', b.x + b.w - 140, y + 14, 112, 42, lvl(u.id) >= u.max ? t('max') : fmt(cost(u)), () => buy(u.id), state.ore >= cost(u) ? 'rgba(76,189,44,.95)' : 'rgba(70,80,120,.8)'); } y += 78; }); }
+  function jumpWin(b) { const g = dustGain(), base = dustBase(), cx = b.x + b.w / 2; if (a.currency_dust) ctx.drawImage(a.currency_dust, cx - 54, b.y + 78, 108, 108); txt(g ? '+' + fmt(g) + ' ' + t('dust') : t('need'), cx, b.y + 220, 26, g ? '#ffb923' : '#9fb0dc', 'center'); txt(fmt(state.galaxyOre) + ' / ' + fmt(CONFIG.prestige.unlockOre), cx, b.y + 260, 16, '#9fb0dc', 'center'); button('dustad', b.x + 44, b.y + b.h - 150, b.w - 88, 48, state.boosts.dustAdReady ? t('dustReady') : t('dustAd') + (base ? ' +' + fmt(base * .5) : ''), () => state.boosts.dustAdReady ? say(t('dustReady')) : reward('dust'), 'rgba(32,158,228,.9)'); button('jump', b.x + 44, b.y + b.h - 86, b.w - 88, 56, t('jump'), jump, g ? 'rgba(244,142,32,.95)' : 'rgba(70,80,120,.8)'); }
+  function dailyWin(b) { const rwd = CONFIG.daily[Math.min(state.daily.streak, CONFIG.daily.length - 1)], cx = b.x + b.w / 2; if (a.icon_daily) ctx.drawImage(a.icon_daily, cx - 56, b.y + 88, 112, 112); txt('Day ' + Math.min(state.daily.streak + 1, 7), cx, b.y + 230, 30, '#ffb923', 'center'); txt('+' + fmt(rwd.ore) + ' ' + t('ore'), cx, b.y + 275, 22, '#fff', 'center'); txt('+' + rwd.crystals + ' ' + t('crystals'), cx, b.y + 310, 20, '#2bd8ff', 'center'); button('daily', b.x + 44, b.y + b.h - 86, b.w - 88, 56, state.daily.pending ? t('collect') : t('already'), daily, 'rgba(76,189,44,.95)'); }
+  function offWin(b) { const cx = b.x + b.w / 2; txt(t('offline'), cx, b.y + 150, 20, '#9fb0dc', 'center'); txt('+' + fmt(offline ? offline.gain : 0) + ' ' + t('ore'), cx, b.y + 205, 34, '#2bd8ff', 'center'); button('collect', b.x + 44, b.y + b.h - 86, (b.w - 104) / 2, 56, t('collect'), () => claimOffline(1), 'rgba(76,189,44,.95)'); button('x2', b.x + 60 + (b.w - 104) / 2, b.y + b.h - 86, (b.w - 104) / 2, 56, '×2 AD', () => reward('offline'), 'rgba(244,142,32,.95)'); }
+  function settings(b) { let y = b.y + 94; txt(status, b.x + 34, y, 15, '#9fb0dc'); y += 52; button('sound', b.x + 34, y, b.w - 68, 46, t('sound') + ': ' + (state.settings.sound ? t('on') : t('off')), () => { state.settings.sound = !state.settings.sound; save(true); }); y += 58; button('banner', b.x + 34, y, b.w - 68, 46, state.purchases.noads ? t('noads') : t('banner') + ': ' + (state.settings.banner ? t('on') : t('off')), () => { state.settings.banner = !state.settings.banner; if (SDK) SDK.syncBanner(state.settings.banner, state.purchases.noads); save(true); }); y += 58; button('store', b.x + 34, y, b.w - 68, 46, t('store'), () => open('store'), 'rgba(244,142,32,.95)'); y += 58; button('ach', b.x + 34, y, b.w - 68, 46, t('ach'), () => open('ach')); y += 58; button('reset', b.x + 34, y, b.w - 68, 46, t('reset'), () => { localStorage.removeItem(CONFIG.save.key); state = fresh(); modal = null; save(true); }, 'rgba(255,88,106,.95)'); }
+  function ach(b) { let y = b.y + 80 - scroll; CONFIG.achievements.forEach(x => { if (y > b.y + 60 && y < b.y + b.h - 20) { const done = state.achievements[x.id], val = x.v === 'drones' ? drones() : x.v === 'dailyStreak' ? state.daily.streak : state[x.v]; r(b.x + 20, y, b.w - 40, 62, 16); ctx.fillStyle = done ? 'rgba(61,90,44,.82)' : 'rgba(12,24,61,.88)'; ctx.fill(); txt(n(x.n), b.x + 36, y + 18, 16); txt(n(x.d), b.x + 36, y + 42, 12, '#9fb0dc'); txt(done ? '✓ +' + x.c : fmt(Math.min(val, x.t)) + '/' + fmt(x.t), b.x + b.w - 34, y + 31, 14, done ? '#6ceb49' : '#ffb923', 'right'); } y += 72; }); }
+  function store(b) { const rows = [['income', t('incomeAd'), 'AD', () => reward('income')], ['crystal', t('freeCrystals'), 'AD', () => state.ads.crystalDate === day() ? say(t('already')) : reward('crystals')], ['noads', 'No Ads', price('noads'), () => buyProduct('noads')], ['starter_pack', 'Starter Pack', price('starter_pack'), () => buyProduct('starter_pack')], ['crystals_small', 'Crystals Small', price('crystals_small'), () => buyProduct('crystals_small')], ['crystals_big', 'Crystals Big', price('crystals_big'), () => buyProduct('crystals_big')], ['drill_skin_neon', 'Neon Drill Skin', price('drill_skin_neon'), () => buyProduct('drill_skin_neon')]]; let y = b.y + 80 - scroll; rows.forEach(row => { if (y > b.y + 60 && y < b.y + b.h - 20) { r(b.x + 20, y, b.w - 40, 60, 16); ctx.fillStyle = 'rgba(12,24,61,.88)'; ctx.fill(); txt(row[1], b.x + 38, y + 22, 16); txt(row[2], b.x + 38, y + 44, 12, '#9fb0dc'); button('p', b.x + b.w - 138, y + 12, 100, 38, row[2] === 'AD' ? 'AD' : t('buy'), row[3], row[2] === 'AD' ? 'rgba(244,142,32,.95)' : 'rgba(76,189,44,.95)'); } y += 70; }); }
+  function price(id) { return catalog[id] && catalog[id].price ? catalog[id].price : (SDK && SDK.state.paymentsAvailable ? '—' : 'SDK off'); }
+  function leaders(b) { if (!lb.length) txt(t('emptyLb'), b.x + b.w / 2, b.y + 170, 20, '#9fb0dc', 'center'); lb.slice(0, 10).forEach((x, i) => { const y = b.y + 90 + i * 38; txt('#' + (x.rank + 1), b.x + 36, y, 16, '#ffb923'); txt(x.name || 'Player', b.x + 96, y, 16); txt(fmt(x.score), b.x + b.w - 38, y, 16, '#2bd8ff', 'right'); }); button('refresh', b.x + 44, b.y + b.h - 76, b.w - 88, 48, 'Refresh', showLb); }
 
-  function mine(x, y) {
-    let amount = tapPower();
-    const crit = Math.random() < lvl('crit') * CONFIG.mining.critChancePerLevel;
-    if (crit) amount *= CONFIG.mining.critMultiplier;
-    addOre(amount);
-    state.taps += 1;
-    tapPulse = 1;
-    floater('+' + fmt(amount), x, y - 44, crit ? '#ffb923' : '#2bd8ff');
-    if (crit) floater('КРИТ!', x, y - 76, '#ffb923');
-    checkAchievements();
-  }
+  function frame(tm) { const dt = Math.min(.1, (tm - last) / 1000); last = tm; ui = []; if (state && !paused) addOre(dps() * dt); ctx.clearRect(0, 0, W, H); bg(tm); if (state) { top(); scene(tm); bottom(); } floats = floats.filter(f => { f.life -= dt; f.y -= 30 * dt; ctx.globalAlpha = Math.max(0, f.life / .8); txt(f.s, f.x, f.y, 22, f.c, 'center'); ctx.globalAlpha = 1; return f.life > 0; }); toast = toast.filter((o, i) => { o.life -= dt; r(W / 2 - 190, 112 + i * 40, 380, 32, 16); ctx.fillStyle = 'rgba(6,12,37,.88)'; ctx.fill(); txt(o.s, W / 2, 128 + i * 40, 14, '#fff', 'center'); return o.life > 0; }); modalDraw(); if (state && tm - auto > CONFIG.save.autosaveMs) { save(false); auto = tm; } requestAnimationFrame(frame); }
+  function pos(e) { const q = canvas.getBoundingClientRect(); return { x: e.clientX - q.left, y: e.clientY - q.top }; }
+  function click(p) { for (let i = ui.length - 1; i >= 0; i--) { const b = ui[i]; if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) return b.fn(p); } }
+  canvas.addEventListener('pointerdown', e => { e.preventDefault(); const p = pos(e); drag = { y: p.y, last: p.y, moved: false }; });
+  canvas.addEventListener('pointermove', e => { if (!drag) return; const p = pos(e), dy = p.y - drag.last; if (Math.abs(p.y - drag.y) > 8) drag.moved = true; if (drag.moved && ['shop', 'ach', 'store'].includes(modal)) scroll = Math.max(0, scroll - dy); drag.last = p.y; });
+  canvas.addEventListener('pointerup', e => { e.preventDefault(); const p = pos(e), moved = drag && drag.moved; drag = null; if (!moved) click(p); });
+  canvas.addEventListener('wheel', e => { if (['shop', 'ach', 'store'].includes(modal)) { e.preventDefault(); scroll = Math.max(0, scroll + e.deltaY); } }, { passive: false });
+  addEventListener('resize', resize); addEventListener('beforeunload', () => save(true)); document.addEventListener('visibilitychange', () => { if (document.hidden) { save(true); SDK && SDK.gameplayStop(); } else { SDK && SDK.gameplayStart(); } });
 
-  function buy(id) {
-    const u = up(id);
-    if (!u) return;
-    if (lvl(id) >= u.max) return toast(TEXT.max);
-    const price = cost(u);
-    if (state.ore < price) return toast(TEXT.notEnough);
-    state.ore -= price;
-    state.upgrades[id]++;
-    state.upgradeLevels++;
-    floater('UP!', W / 2, H / 2 - 120, '#6ceb49');
-    checkAchievements();
-  }
-
-  function prestige() {
-    const gain = dustGain();
-    if (!gain) return toast('Нужно больше руды для прыжка');
-    save();
-    state.starDust += gain;
-    state.prestiges++;
-    state.ore = 0;
-    state.galaxyOre = 0;
-    CONFIG.upgrades.forEach(u => state.upgrades[u.id] = 0);
-    crystalBucket = 0;
-    modal = null;
-    toast('Прыжок! +' + fmt(gain) + ' пыли');
-    checkAchievements();
-    save();
-  }
-
-  function today() { return new Date().toISOString().slice(0, 10); }
-  function dailyReward() { return CONFIG.daily[Math.min(state.daily.streak, CONFIG.daily.length - 1)]; }
-  function prepareDaily() {
-    if (state.daily.lastDate !== today()) {
-      state.daily.pending = true;
-      if (!modal) modal = 'daily';
-    }
-  }
-  function claimDaily() {
-    if (!state.daily.pending) return;
-    const r = dailyReward();
-    addOre(r.ore);
-    state.crystals += r.crystals;
-    state.daily.streak++;
-    state.daily.lastDate = today();
-    state.daily.pending = false;
-    toast(`Ежедневка: +${fmt(r.ore)} руды, +${r.crystals} кр.`);
-    modal = null;
-    checkAchievements();
-    save();
-  }
-
-  function applyOffline() {
-    const seconds = Math.floor((Date.now() - (state.lastSaveTime || Date.now())) / 1000);
-    if (seconds < CONFIG.offline.minSecondsToShow) return;
-    const capped = Math.min(seconds, CONFIG.offline.capSeconds);
-    const gain = offlineDps() * capped;
-    if (gain > 1) {
-      pendingOffline = { seconds, capped, gain };
-      modal = 'offline';
-    }
-  }
-  function collectOffline(multiplier) {
-    if (!pendingOffline) return;
-    addOre(pendingOffline.gain * multiplier);
-    toast('Оффлайн: +' + fmt(pendingOffline.gain * multiplier) + ' руды');
-    pendingOffline = null;
-    modal = null;
-    save();
-  }
-
-  function achievementValue(a) {
-    if (a.value === 'drones') return drones();
-    if (a.value === 'dailyStreak') return state.daily.streak;
-    return state[a.value] || 0;
-  }
-  function checkAchievements() {
-    CONFIG.achievements.forEach(a => {
-      if (state.achievements[a.id]) return;
-      if (achievementValue(a) >= a.target) {
-        state.achievements[a.id] = true;
-        state.crystals += a.crystals;
-        toast('Достижение: +' + a.crystals + ' кр.');
-      }
-    });
-  }
-
-  function floater(label, x, y, color) { floaters.push({ label, x, y, color, life: 0.85 }); }
-  function toast(label) { toasts.push({ label, life: 2.6 }); if (toasts.length > 4) toasts.shift(); }
-  function btn(id, x, y, w, h, label, action) { buttons.push({ id, x, y, w, h, label, action }); }
-
-  function asteroidBox() {
-    const top = 104, bottom = 126;
-    const free = Math.max(220, H - top - bottom);
-    const r = Math.max(86, Math.min(160, Math.min(W, free) * 0.26));
-    return { x: W / 2, y: top + free * 0.48, r };
-  }
-
-  function asteroidSprite() {
-    const p = state.galaxyOre / CONFIG.prestige.unlockOre;
-    if (p >= 3) return 'asteroid_legendary';
-    if (p >= 1.25) return 'asteroid_gold';
-    if (p >= 0.4) return 'asteroid_crystal';
-    return 'asteroid_normal';
-  }
-
-  function drawBackground(time) {
-    const bg = assets.background_space;
-    if (bg) {
-      const s = Math.max(W / bg.width, H / bg.height);
-      ctx.drawImage(bg, (W - bg.width * s) / 2, (H - bg.height * s) / 2, bg.width * s, bg.height * s);
-    } else {
-      ctx.fillStyle = '#05081c'; ctx.fillRect(0, 0, W, H);
-    }
-    const g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(0,0,0,.25)'); g.addColorStop(1, 'rgba(0,0,0,.45)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.fillStyle = 'rgba(255,255,255,.65)';
-    for (let i = 0; i < 24; i++) {
-      const x = (i * 97 + time * 0.006 * (i % 3 + 1)) % W;
-      const y = (i * 53) % H;
-      ctx.globalAlpha = 0.25 + (i % 5) * 0.12;
-      ctx.beginPath(); ctx.arc(x, y, i % 4 ? 1 : 1.8, 0, TAU); ctx.fill();
-    }
-    ctx.globalAlpha = 1;
-  }
-
-  function drawTop() {
-    rect(12, 12, W - 24, 78, 20);
-    ctx.fillStyle = 'rgba(13,22,59,.88)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(43,216,255,.48)'; ctx.lineWidth = 2; ctx.stroke();
-    drawCurrency(24, 50, 'currency_ore', TEXT.ore, state.ore);
-    drawCurrency(W * 0.36, 50, 'currency_crystal', TEXT.crystals, state.crystals);
-    drawCurrency(W * 0.68, 50, 'currency_dust', TEXT.dust, state.starDust);
-    text(fmt(dps()) + '/сек', W - 24, 82, 13, '#6ceb49', 'right', '600');
-  }
-
-  function drawCurrency(x, y, icon, label, value) {
-    if (assets[icon]) ctx.drawImage(assets[icon], x, y - 22, 40, 40);
-    text(label, x + 46, y - 10, 11, '#9fb0dc', 'left', '600');
-    text(fmt(value), x + 46, y + 12, 18, '#f4f7ff', 'left', '900');
-  }
-
-  function drawScene(time) {
-    const a = asteroidBox();
-    const count = Math.min(drones(), 8);
-    const drone = assets.drone_basic;
-    for (let i = 0; i < count && drone; i++) {
-      const ang = TAU * i / count + time * 0.00045;
-      const x = a.x + Math.cos(ang) * a.r * 1.45;
-      const y = a.y + Math.sin(ang) * a.r * 0.72;
-      const size = Math.max(48, Math.min(76, W * 0.075));
-      ctx.save(); ctx.translate(x, y); ctx.rotate(Math.cos(ang) * 0.16);
-      ctx.drawImage(drone, -size / 2, -size / 3, size, size * 0.64); ctx.restore();
-    }
-    const spr = assets[asteroidSprite()];
-    const pulse = 1 + tapPulse * 0.08;
-    if (spr) {
-      ctx.save(); ctx.translate(a.x, a.y); ctx.rotate(Math.sin(time * 0.00035) * 0.04);
-      const size = a.r * 2.08 * pulse;
-      ctx.drawImage(spr, -size / 2, -size / 2, size, size); ctx.restore();
-    }
-    const bw = Math.max(240, Math.min(520, W * 0.72));
-    drawProgress((W - bw) / 2, a.y + a.r + 34, bw, 24, state.galaxyOre / CONFIG.prestige.unlockOre,
-      `${fmt(state.galaxyOre)} / ${fmt(CONFIG.prestige.unlockOre)}`);
-    text('Тапайте астероид', W / 2, a.y + a.r + 82, 18, '#9fb0dc', 'center', '700');
-  }
-
-  function drawProgress(x, y, w, h, ratio, label) {
-    ratio = Math.max(0, Math.min(1, ratio));
-    rect(x, y, w, h, h / 2); ctx.fillStyle = 'rgba(2,7,25,.84)'; ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.stroke();
-    if (ratio > 0) { rect(x + 3, y + 3, Math.max(h - 6, (w - 6) * ratio), h - 6, h / 2); ctx.fillStyle = '#2bd8ff'; ctx.fill(); }
-    text(label, x + w / 2, y + h / 2, 12, '#fff', 'center', '800');
-  }
-
-  function drawBottom() {
-    const y = H - 110, pad = 10;
-    rect(pad, y, W - pad * 2, 100, 22); ctx.fillStyle = 'rgba(6,12,37,.88)'; ctx.fill(); ctx.strokeStyle = 'rgba(43,216,255,.42)'; ctx.stroke();
-    const items = [
-      ['shop', TEXT.shop, 'icon_upgrade', () => open('shop')],
-      ['jump', TEXT.jump, 'icon_prestige', () => open('prestige')],
-      ['ach', TEXT.ach, 'icon_achievement', () => open('ach')],
-      ['daily', TEXT.daily, 'icon_daily', () => open('daily')],
-      ['set', TEXT.settings, 'icon_settings', () => open('settings')]
-    ];
-    const gap = 6, bw = (W - 38 - gap * 4) / 5;
-    items.forEach((it, i) => {
-      const x = 19 + i * (bw + gap), h = 76;
-      rect(x, y + 12, bw, h, 16);
-      ctx.fillStyle = it[0] === 'jump' && dustGain() > 0 ? 'rgba(255,185,35,.30)' : 'rgba(28,42,92,.88)'; ctx.fill();
-      ctx.strokeStyle = it[0] === 'jump' && dustGain() > 0 ? '#ffb923' : 'rgba(255,255,255,.16)'; ctx.stroke();
-      if (assets[it[2]]) ctx.drawImage(assets[it[2]], x + bw / 2 - 18, y + 20, 36, 36);
-      text(it[1], x + bw / 2, y + 74, bw < 70 ? 10 : 12, '#fff', 'center', '900');
-      btn(it[0], x, y + 12, bw, h, it[1], it[3]);
-    });
-  }
-
-  function open(name) { modal = name; modalScroll = 0; }
-  function modalBox() { const w = Math.min(760, W - 24), h = Math.min(H - 56, (modal === 'shop' || modal === 'ach') ? 640 : 520); return { x: (W - w) / 2, y: (H - h) / 2, w, h }; }
-  function maxScroll() { const b = modalBox(); return modal === 'shop' ? Math.max(0, CONFIG.upgrades.length * 82 - (b.h - 128)) : modal === 'ach' ? Math.max(0, CONFIG.achievements.length * 74 - (b.h - 128)) : 0; }
-
-  function drawModal() {
-    ctx.fillStyle = 'rgba(0,0,0,.56)'; ctx.fillRect(0, 0, W, H);
-    const b = modalBox(); rect(b.x, b.y, b.w, b.h, 24); ctx.fillStyle = 'rgba(27,40,92,.94)'; ctx.fill(); ctx.strokeStyle = 'rgba(43,216,255,.50)'; ctx.lineWidth = 2; ctx.stroke();
-    const titles = { shop: TEXT.shop, prestige: 'Прыжок в новую галактику', ach: TEXT.ach, daily: 'Ежедневная награда', offline: 'Дроны работали без вас', settings: TEXT.settings };
-    text(titles[modal] || 'Окно', b.x + 24, b.y + 34, 24, '#fff', 'left', '900');
-    smallButton(b.x + b.w - 86, b.y + 16, 66, 38, '×', () => { modal = null; }, 'blue');
-    if (modal === 'shop') drawShop(b); else if (modal === 'prestige') drawPrestige(b); else if (modal === 'ach') drawAchievements(b); else if (modal === 'daily') drawDaily(b); else if (modal === 'offline') drawOffline(b); else if (modal === 'settings') drawSettings(b);
-  }
-
-  function smallButton(x, y, w, h, label, action, color) {
-    const fill = color === 'green' ? 'rgba(76,189,44,.95)' : color === 'orange' ? 'rgba(244,142,32,.95)' : color === 'red' ? 'rgba(255,88,106,.95)' : 'rgba(32,158,228,.88)';
-    rect(x, y, w, h, 14); ctx.fillStyle = fill; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.stroke();
-    text(label, x + w / 2, y + h / 2, Math.min(16, h * 0.42), '#fff', 'center', '900'); btn('b' + Math.random(), x, y, w, h, label, action);
-  }
-
-  function drawShop(b) {
-    const x = b.x + 18, startY = b.y + 74, w = b.w - 36, h = 72;
-    ctx.save(); ctx.beginPath(); ctx.rect(b.x + 12, startY - 6, b.w - 24, b.h - 92); ctx.clip();
-    CONFIG.upgrades.forEach((u, i) => {
-      const y = startY + i * 82 - modalScroll; if (y > b.y + b.h || y + h < startY - 8) return;
-      const level = lvl(u.id), price = cost(u), can = state.ore >= price && level < u.max;
-      rect(x, y, w, h, 18); ctx.fillStyle = can ? 'rgba(26,61,96,.88)' : 'rgba(15,22,54,.86)'; ctx.fill(); ctx.strokeStyle = can ? '#2bd8ff' : 'rgba(255,255,255,.12)'; ctx.stroke();
-      if (assets[u.icon]) ctx.drawImage(assets[u.icon], x + 10, y + 10, 52, 52);
-      text(u.name, x + 74, y + 20, 16, '#fff', 'left', '800'); text(u.desc, x + 74, y + 43, 12, '#9fb0dc', 'left', '600'); text(`Lv ${level}/${u.max}`, x + 74, y + 61, 12, '#ffb923', 'left', '700');
-      const bw = Math.max(96, Math.min(150, w * 0.24)), bx = x + w - bw - 12, by = y + 14;
-      rect(bx, by, bw, h - 28, 14); ctx.fillStyle = level >= u.max ? 'rgba(120,120,140,.55)' : can ? 'rgba(76,189,44,.95)' : 'rgba(70,80,120,.72)'; ctx.fill(); ctx.strokeStyle = 'rgba(255,255,255,.28)'; ctx.stroke();
-      text(level >= u.max ? TEXT.max : TEXT.buy, bx + bw / 2, by + 16, 13, '#fff', 'center', '900'); if (level < u.max) text(fmt(price), bx + bw / 2, by + 38, 13, '#fff', 'center', '900');
-      btn('buy' + u.id, bx, by, bw, h - 28, TEXT.buy, () => buy(u.id));
-    });
-    ctx.restore();
-  }
-
-  function drawPrestige(b) {
-    const gain = dustGain(), cx = b.x + b.w / 2;
-    if (assets.currency_dust) ctx.drawImage(assets.currency_dust, cx - 54, b.y + 86, 108, 108);
-    text(gain ? `+${fmt(gain)} звёздной пыли` : 'Нужно больше руды', cx, b.y + 224, 26, gain ? '#ffb923' : '#9fb0dc', 'center', '900');
-    text(`${fmt(state.galaxyOre)} / ${fmt(CONFIG.prestige.unlockOre)} руды в галактике`, cx, b.y + 266, 16, '#9fb0dc', 'center', '600');
-    text(`Множитель: x${mult().toFixed(2)} → x${(mult() + gain * CONFIG.prestige.dustBonus).toFixed(2)}`, cx, b.y + 304, 18, '#2bd8ff', 'center', '800');
-    smallButton(b.x + 46, b.y + b.h - 86, b.w - 92, 56, 'Совершить прыжок', prestige, gain ? 'orange' : 'blue');
-  }
-
-  function drawAchievements(b) {
-    const x = b.x + 18, startY = b.y + 76, w = b.w - 36, h = 64;
-    ctx.save(); ctx.beginPath(); ctx.rect(b.x + 12, startY - 6, b.w - 24, b.h - 92); ctx.clip();
-    CONFIG.achievements.forEach((a, i) => {
-      const y = startY + i * 74 - modalScroll; if (y > b.y + b.h || y + h < startY - 8) return;
-      const done = !!state.achievements[a.id], value = Math.min(achievementValue(a), a.target);
-      rect(x, y, w, h, 16); ctx.fillStyle = done ? 'rgba(61,90,44,.82)' : 'rgba(15,22,54,.86)'; ctx.fill(); ctx.strokeStyle = done ? '#6ceb49' : 'rgba(255,255,255,.14)'; ctx.stroke();
-      if (assets.icon_achievement) ctx.drawImage(assets.icon_achievement, x + 10, y + 8, 48, 48);
-      text(a.name, x + 70, y + 18, 16, '#fff', 'left', '800'); text(a.desc, x + 70, y + 41, 12, '#9fb0dc', 'left', '600');
-      text(done ? 'Получено' : `${fmt(value)}/${fmt(a.target)}`, x + w - 18, y + 22, 13, done ? '#6ceb49' : '#ffb923', 'right', '800'); text(`+${a.crystals} кр.`, x + w - 18, y + 46, 12, '#2bd8ff', 'right', '700');
-    }); ctx.restore();
-  }
-
-  function drawDaily(b) {
-    const r = dailyReward(), day = Math.min(state.daily.streak + 1, CONFIG.daily.length), cx = b.x + b.w / 2;
-    if (assets.icon_daily) ctx.drawImage(assets.icon_daily, cx - 56, b.y + 86, 112, 112);
-    text(`День ${day}`, cx, b.y + 224, 30, '#ffb923', 'center', '900'); text(`+${fmt(r.ore)} руды`, cx, b.y + 268, 22, '#fff', 'center', '800'); text(`+${r.crystals} крист.`, cx, b.y + 302, 20, '#2bd8ff', 'center', '800');
-    if (state.daily.pending) smallButton(b.x + 46, b.y + b.h - 88, b.w - 92, 56, TEXT.collect, claimDaily, 'green'); else text('Уже получено сегодня', cx, b.y + b.h - 64, 20, '#6ceb49', 'center', '800');
-  }
-
-  function drawOffline(b) {
-    const p = pendingOffline || { gain: 0, capped: 0 }, cx = b.x + b.w / 2;
-    if (assets.drone_basic) ctx.drawImage(assets.drone_basic, cx - 86, b.y + 88, 172, 110);
-    text('Пока вас не было, дроны добыли:', cx, b.y + 230, 18, '#9fb0dc', 'center', '600'); text('+' + fmt(p.gain) + ' руды', cx, b.y + 276, 32, '#2bd8ff', 'center', '900'); text(`${Math.floor(p.capped / 60)} мин. учтено`, cx, b.y + 314, 14, '#9fb0dc', 'center', '600');
-    smallButton(b.x + 38, b.y + b.h - 88, (b.w - 92) / 2, 56, TEXT.collect, () => collectOffline(1), 'green'); smallButton(b.x + 54 + (b.w - 92) / 2, b.y + b.h - 88, (b.w - 92) / 2, 56, '×2 в фазе 3', () => toast('Rewarded-реклама будет подключена в фазе 3'), 'orange');
-  }
-
-  function drawSettings(b) {
-    const x = b.x + 34; let y = b.y + 100;
-    text(`Звук: ${state.settings.sound ? 'вкл' : 'выкл'}`, x, y, 20, '#fff', 'left', '800'); smallButton(b.x + b.w - 164, y - 24, 116, 48, state.settings.sound ? 'Выкл' : 'Вкл', () => { state.settings.sound = !state.settings.sound; save(); }, 'blue');
-    y += 80; text('Таблица лидеров будет подключена через SDK в фазе 3.', x, y, 15, '#9fb0dc', 'left', '600');
-    y += 80; text('Сброс нужен только для тестов.', x, y, 15, '#9fb0dc', 'left', '600'); smallButton(x, y + 30, b.w - 68, 52, 'Сбросить прогресс', () => { localStorage.removeItem(CONFIG.save.key); state = defaultSave(); modal = null; toast('Прогресс сброшен'); save(); }, 'red');
-  }
-
-  function drawFloaters(dt) {
-    floaters = floaters.filter(f => { f.life -= dt; f.y -= 34 * dt; ctx.globalAlpha = Math.max(0, f.life / 0.85); text(f.label, f.x, f.y, 22, f.color, 'center', '900'); ctx.globalAlpha = 1; return f.life > 0; });
-  }
-  function drawToasts(dt) {
-    toasts = toasts.filter((t, i) => { t.life -= dt; const w = Math.min(W - 32, 420), y = 112 + i * 42; ctx.globalAlpha = Math.min(1, t.life / 0.35); rect((W - w) / 2, y, w, 34, 16); ctx.fillStyle = 'rgba(6,12,37,.86)'; ctx.fill(); ctx.strokeStyle = 'rgba(43,216,255,.48)'; ctx.stroke(); text(t.label, W / 2, y + 17, 14, '#fff', 'center', '700'); ctx.globalAlpha = 1; return t.life > 0; });
-  }
-
-  function update(dt) {
-    addOre(dps() * dt);
-    tapPulse = Math.max(0, tapPulse - dt * 3.2);
-    checkAchievements();
-  }
-
-  function frame(time) {
-    const dt = Math.min(0.1, Math.max(0, (time - last) / 1000)); last = time;
-    buttons = [];
-    update(dt);
-    ctx.clearRect(0, 0, W, H);
-    drawBackground(time); drawTop(); drawScene(time); drawBottom(); drawFloaters(dt); drawToasts(dt); if (modal) drawModal();
-    if (time - autosaveAt > CONFIG.save.autosaveMs) { save(); autosaveAt = time; }
-    requestAnimationFrame(frame);
-  }
-
-  function point(e) { const r = canvas.getBoundingClientRect(); return { x: e.clientX - r.left, y: e.clientY - r.top }; }
-  canvas.addEventListener('pointerdown', e => { e.preventDefault(); const p = point(e); drag = { x: p.x, y: p.y, lastY: p.y, moved: false }; });
-  canvas.addEventListener('pointermove', e => { if (!drag) return; const p = point(e); const dy = p.y - drag.lastY; if (Math.abs(p.y - drag.y) > 8) drag.moved = true; if ((modal === 'shop' || modal === 'ach') && drag.moved) modalScroll = Math.max(0, Math.min(maxScroll(), modalScroll - dy)); drag.lastY = p.y; });
-  canvas.addEventListener('pointerup', e => { e.preventDefault(); const p = point(e), wasDrag = drag && drag.moved; drag = null; if (wasDrag) return; click(p.x, p.y); });
-  canvas.addEventListener('wheel', e => { if (modal === 'shop' || modal === 'ach') { e.preventDefault(); modalScroll = Math.max(0, Math.min(maxScroll(), modalScroll + e.deltaY)); } }, { passive: false });
-
-  function click(x, y) {
-    for (let i = buttons.length - 1; i >= 0; i--) { const b = buttons[i]; if (x >= b.x && x <= b.x + b.w && y >= b.y && y <= b.y + b.h) return b.action(); }
-    if (!modal) { const a = asteroidBox(), dx = x - a.x, dy = y - a.y; if (dx * dx + dy * dy <= a.r * a.r) mine(x, y); }
-  }
-
-  addEventListener('resize', resize);
-  addEventListener('orientationchange', () => setTimeout(resize, 120));
-  document.addEventListener('visibilitychange', () => { if (document.hidden) save(); });
-  addEventListener('beforeunload', save);
-
+  async function boot() { resize(); requestAnimationFrame(frame); if (SDK) { await SDK.init(CONFIG.remoteFlags); lang = ((SDK.state.lang || 'ru').slice(0, 2) === 'ru') ? 'ru' : 'en'; flags(SDK.state.flags); } await load(); status = !SDK || !SDK.state.sdkAvailable ? t('local') : (SDK.state.authorized ? t('cloud') : t('guest')); await initPurchases(); if (state.daily.lastDate !== day()) { state.daily.pending = true; modal = 'daily'; } calcOffline(); checkAch(); SDK && SDK.loadingReady(); SDK && SDK.gameplayStart(); SDK && SDK.submitLeaderboard(CONFIG.yandex.leaderboardName, state.starDust, 'Prestige ' + state.prestiges); say(status); save(false); if (modal === 'loading') modal = null; }
   window.STAR_MINER_CONFIG = CONFIG;
-  resize(); applyOffline(); prepareDaily(); checkAchievements(); toast('Прогресс загружен'); requestAnimationFrame(frame);
+  boot();
 })();
