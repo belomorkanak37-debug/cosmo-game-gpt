@@ -30,11 +30,12 @@ jobs:
         run: |
           test -f index.html
           test -f js/playable.js
-          test -f assets/asteroid_normal.svg
-          test -f assets/asteroid_crystal.svg
-          test -f assets/asteroid_gold.svg
-          test -f assets/asteroid_legendary.svg
+          test -f assets/asteroid_normal.png
+          test -f assets/asteroid_crystal.png
+          test -f assets/asteroid_gold.png
+          test -f assets/asteroid_legendary.png
           grep -q "js/playable.js" index.html
+          grep -q "asteroid_normal.png" js/playable.js
           node --check js/playable.js
 
       - name: Configure Pages
